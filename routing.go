@@ -289,6 +289,60 @@ func (dht *IpfsDHT) getValuesAsyncRoutine(ctx context.Context, key string, nvals
 
 }
 
+func (dht *IpfsDHT) GetValueFromPeer(ctx context.Context, p peer.ID, key string, validate bool) (rv routing.RecvdVal, err error) {
+	pmes, err := dht.getValueSingle(ctx, p, key)
+	if err != nil {
+		return
+	}
+
+	record := pmes.GetRecord()
+	if record == nil {
+		log.Warning("GetRecordFromNode: routing.ErrNotFound")
+		err = routing.ErrNotFound
+		return
+	}
+
+	// Success! We were given the value
+	log.Debug("GetRecordFromNode: got value")
+
+	// make sure record is valid.
+	if validate {
+		err = dht.verifyRecordOnline(ctx, record)
+		if err != nil {
+			log.Info("Received invalid record! (discarded)")
+			// return a sentinal to signify an invalid record was received
+			err = errInvalidRecord
+			return
+		}
+	}
+
+	rv = routing.RecvdVal{
+		Val:  record.GetValue(),
+		From: p,
+	}
+	return
+}
+
+func (dht *IpfsDHT) PutValueToPeer(ctx context.Context, p peer.ID, key string, value []byte) error {
+	sk, err := dht.getOwnPrivateKey()
+	if err != nil {
+		return err
+	}
+
+	sign, err := dht.Validator.IsSigned(key)
+	if err != nil {
+		return err
+	}
+
+	rec, err := record.MakePutRecord(sk, key, value, sign)
+	if err != nil {
+		log.Debug("creation of record failed!")
+		return err
+	}
+
+	return dht.putValueToPeer(ctx, p, key, rec)
+}
+
 // Value provider layer of indirection.
 // This is what DSHTs (Coral and MainlineDHT) do to store large values in a DHT.
 
