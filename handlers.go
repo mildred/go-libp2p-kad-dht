@@ -14,6 +14,7 @@ import (
 	lgbl "github.com/libp2p/go-libp2p-loggables"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
+	record "github.com/libp2p/go-libp2p-record"
 	recpb "github.com/libp2p/go-libp2p-record/pb"
 	base32 "github.com/whyrusleeping/base32"
 )
@@ -44,6 +45,9 @@ func (dht *IpfsDHT) handlerForMsgType(t pb.Message_MessageType) dhtHandler {
 }
 
 func (dht *IpfsDHT) handleGetValue(ctx context.Context, p peer.ID, pmes *pb.Message) (*pb.Message, error) {
+	var err error
+	var rec *recpb.Record
+
 	defer log.EventBegin(ctx, "handleGetValue", p).Done()
 	log.Debugf("%s handleGetValue for key: %s", dht.self, pmes.GetKey())
 
@@ -57,9 +61,34 @@ func (dht *IpfsDHT) handleGetValue(ctx context.Context, p peer.ID, pmes *pb.Mess
 		// TODO: send back an error response? could be bad, but the other node's hanging.
 	}
 
-	rec, err := dht.checkLocalDatastore(k)
-	if err != nil {
-		return nil, err
+	if dht.DataHandler != nil {
+		data, err := dht.DataHandler.GetRecord(k)
+		if err != nil {
+			return nil, err
+		}
+		if data != nil {
+			sk, err := dht.getOwnPrivateKey()
+			if err != nil {
+				return nil, err
+			}
+
+			sign, err := dht.Validator.IsSigned(k)
+			if err != nil {
+				return nil, err
+			}
+
+			rec, err = record.MakePutRecord(sk, k, data, sign)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if rec == nil {
+		rec, err = dht.checkLocalDatastore(k)
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp.Record = rec
 
@@ -157,6 +186,18 @@ func (dht *IpfsDHT) handlePutValue(ctx context.Context, p peer.ID, pmes *pb.Mess
 		return nil, errors.New("nil record")
 	}
 
+	data, err := proto.Marshal(rec)
+	if err != nil {
+		return nil, err
+	}
+
+	if dht.DataHandler != nil {
+		cont := dht.DataHandler.NewRecord(pmes.GetKey(), data, p)
+		if !cont {
+			return pmes, nil
+		}
+	}
+
 	if err := dht.verifyRecordLocally(rec); err != nil {
 		log.Warningf("Bad dht record in PUT from: %s. %s", peer.ID(pmes.GetRecord().GetAuthor()), err)
 		return nil, err
@@ -164,11 +205,6 @@ func (dht *IpfsDHT) handlePutValue(ctx context.Context, p peer.ID, pmes *pb.Mess
 
 	// record the time we receive every record
 	rec.TimeReceived = proto.String(u.FormatRFC3339(time.Now()))
-
-	data, err := proto.Marshal(rec)
-	if err != nil {
-		return nil, err
-	}
 
 	err = dht.datastore.Put(dskey, data)
 	log.Debugf("%s handlePutValue %v", dht.self, dskey)

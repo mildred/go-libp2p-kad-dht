@@ -47,7 +47,8 @@ type IpfsDHT struct {
 	self      peer.ID          // Local peer (yourself)
 	peerstore pstore.Peerstore // Peer Registry
 
-	datastore ds.Datastore // Local data
+	datastore   ds.Datastore // Local data
+	DataHandler RecordHandler
 
 	routingTable *kb.RoutingTable // Array of routing tables for differently distanced nodes
 	providers    *providers.ProviderManager
@@ -62,6 +63,11 @@ type IpfsDHT struct {
 
 	strmap map[peer.ID]*messageSender
 	smlk   sync.Mutex
+}
+
+type RecordHandler interface {
+	GetRecord(key string) ([]byte, error)
+	NewRecord(key string, value []byte, peer peer.ID) (cont bool)
 }
 
 // NewDHT creates a new DHT object with the given peer as the 'local' host
