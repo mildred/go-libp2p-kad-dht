@@ -72,11 +72,7 @@ func (dht *IpfsDHT) handleGetValue(ctx context.Context, p peer.ID, pmes *pb.Mess
 				return nil, err
 			}
 
-			sign, err := dht.Validator.IsSigned(k)
-			if err != nil {
-				return nil, err
-			}
-
+			sign := false
 			rec, err = record.MakePutRecord(sk, k, data, sign)
 			if err != nil {
 				return nil, err

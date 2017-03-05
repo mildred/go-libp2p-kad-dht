@@ -329,11 +329,7 @@ func (dht *IpfsDHT) PutValueToPeer(ctx context.Context, p peer.ID, key string, v
 		return err
 	}
 
-	sign, err := dht.Validator.IsSigned(key)
-	if err != nil {
-		return err
-	}
-
+	sign := false
 	rec, err := record.MakePutRecord(sk, key, value, sign)
 	if err != nil {
 		log.Debug("creation of record failed!")
