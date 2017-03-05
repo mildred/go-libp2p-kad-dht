@@ -182,16 +182,16 @@ func (dht *IpfsDHT) handlePutValue(ctx context.Context, p peer.ID, pmes *pb.Mess
 		return nil, errors.New("nil record")
 	}
 
-	data, err := proto.Marshal(rec)
-	if err != nil {
-		return nil, err
-	}
-
 	if dht.DataHandler != nil {
-		cont := dht.DataHandler.NewRecord(pmes.GetKey(), data, p)
+		cont := dht.DataHandler.NewRecord(pmes.GetKey(), rec.GetValue(), p)
 		if !cont {
 			return pmes, nil
 		}
+	}
+
+	data, err := proto.Marshal(rec)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := dht.verifyRecordLocally(rec); err != nil {
